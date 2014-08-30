@@ -21,12 +21,15 @@ Option
 
 =cut
 
+
+
 GetOptions(
     \my %opt, qw/
     date=s
 /) or pod2usage(1);
 
 
+# see https://metacpan.org/pod/Config::Pit
 my $config = pit_get(
     "api.twitter.com",
     require => {
@@ -51,10 +54,11 @@ $nt->access_token_secret($config->{token_secret});
 sub main {
     my $cond = join(" OR ", qq/#yapcasia YAPC yapc/);
     $cond = $cond . " -rt/-via exclude:retweets filter:links since:$opt{date}";
-
     my $since_id = 0;
+    my %result = ();
 
     while ( my $res = &search_tweet( $nt, $cond, $since_id ) ) {
+        last unless @{$res->{statuses}};
         for my $tweet ( @{ $res->{statuses} } ) {
             my $url = $tweet->{entities}->{urls}->[0]->{url};
             if ($url) {
@@ -66,18 +70,23 @@ sub main {
 
                 #TODO instagramとか外す
                 next unless  $title;
-                print sprintf( "<a href='%s'>%s</a>", $post_url, $title ) . "\n";
+                # 重複除く
+                $result{$post_url} = $title;
             }
         }
         $since_id = $res->{search_metadata}->{max_id};
-        last unless $res->{search_metadata}->{next_results};
+    }
+
+    # アンカータグにして出力
+    for my $url ( keys %result ) {
+        print sprintf( "<a href='%s'>%s</a>", $url, $result{$url} ) . "\n";
     }
 }
 
 
 sub search_tweet {
     my ( $nt, $cond, $since_id) = @_;
-    $nt->search({q => $cond, since_id => $since_id ,count => 20, lang => 'ja'});
+    $nt->search({q => $cond, since_id => $since_id ,count => 100, lang => 'ja'});
 }
 
 sub get_post {
